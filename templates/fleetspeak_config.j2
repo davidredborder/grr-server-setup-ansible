@@ -1,0 +1,19 @@
+configuration_name: "Fleetspeak"
+components_config {
+mysql_data_source_name: "{{ fleetspeak_database_user }}:{{ fleetspeak_database_password }}@tcp(localhost:3306)/{{ fleetspeak_database_name }}"
+https_config {
+listen_address: "{{ grr_server_hostname }}:4443"
+}
+admin_config {
+listen_address: "localhost:4444"
+}
+}
+trusted_cert_file: "/usr/share/grr-server/fleetspeak-server-bin/etc/fleetspeak-server/trusted_cert.pem"
+trusted_cert_key_file: "/usr/share/grr-server/fleetspeak-server-bin/etc/fleetspeak-server/trusted_cert_key.pem"
+server_cert_file: "/usr/share/grr-server/fleetspeak-server-bin/etc/fleetspeak-server/server_cert.pem"
+server_cert_key_file: "/usr/share/grr-server/fleetspeak-server-bin/etc/fleetspeak-server/server_cert_key.pem"
+server_component_configuration_file: "/usr/share/grr-server/fleetspeak-server-bin/etc/fleetspeak-server/server.components.config"
+public_host_port: "{{ grr_server_hostname }}:4443"
+linux_client_configuration_file: "/usr/share/grr-server/fleetspeak-server-bin/etc/fleetspeak-server/linux_client.config"
+darwin_client_configuration_file: "/usr/share/grr-server/fleetspeak-server-bin/etc/fleetspeak-server/darwin_client.config"
+windows_client_configuration_file: "/usr/share/grr-server/fleetspeak-server-bin/etc/fleetspeak-server/windows_client.config"

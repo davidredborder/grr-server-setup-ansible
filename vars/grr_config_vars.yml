@@ -1,0 +1,31 @@
+# vars/grr_config_vars.yml
+
+# --- GRR PACKAGE DETAILS ---
+grr_version: 3.4.7-1
+grr_deb_url: "https://storage.googleapis.com/releases.grr-response.com/grr-server_{{ grr_version }}_amd64.deb"
+
+# --- MYSQL CONFIGURATION ---
+mysql_max_allowed_packet: 40M
+mysql_log_bin_trust_function_creators: 1
+
+# --- GRR & FLEETSPEAK DATABASE CREDENTIALS ---
+grr_database_user: grr
+grr_database_password: redborder
+grr_database_name: grr
+
+fleetspeak_database_user: fleetspeak
+fleetspeak_database_password: redborder
+fleetspeak_database_name: fleetspeak
+
+# --- GRR SERVER HOSTNAME ---
+grr_server_hostname: grr-server.redbordersc.lan
+
+# --- GRR SERVER CONFIGURATION ---
+# NOTE: This key should be a truly random, long, and unique string for security.
+# Split into two lines as per your original template, but will be joined in YAML.
+grr_adminui_port: 8000
+grr_frontend_port: 8080
+
+# --- GRR ADMIN USER CREATION ---
+grr_admin_username: admin
+grr_admin_password: redborder

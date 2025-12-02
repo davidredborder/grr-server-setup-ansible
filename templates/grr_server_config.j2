@@ -1,0 +1,38 @@
+AdminUI.csrf_secret_key: {{ grr_csrf_secret_key }}
+AdminUI.port: {{ grr_adminui_port }}
+AdminUI.url: http://{{ grr_server_hostname }}:{{ grr_adminui_port }}
+Blobstore.implementation: DbBlobStore
+CA.certificate: ''
+Client.executable_signing_public_key: ''
+Client.fleetspeak_enabled: true
+Client.server_urls:
+- http://{{ grr_server_hostname }}:{{ grr_frontend_port }}/
+ClientBuilder.fleetspeak_bundled: true
+Database.implementation: MysqlDB
+FleetspeakFrontend Context:
+  Server.fleetspeak_message_listen_address: localhost:11111
+Frontend.bind_port: {{ grr_frontend_port }}
+Frontend.certificate: ''
+Logging.domain: localhost
+Monitoring.alert_email: grr-monitoring@localhost
+Monitoring.emergency_access_email: grr-emergency@localhost
+Mysql.database: {{ grr_database_name }}
+Mysql.database_name: {{ grr_database_name }}
+Mysql.database_password: {{ grr_database_password }}
+Mysql.database_username: {{ grr_database_user }}
+Mysql.host: localhost
+Mysql.password: {{ grr_database_password }}
+Mysql.port: 0
+Mysql.username: {{ grr_database_user }}
+PrivateKeys.ca_key: ''
+PrivateKeys.executable_signing_private_key: ''
+PrivateKeys.server_key: ''
+Server.fleetspeak_enabled: true
+Server.fleetspeak_server: localhost:4444
+Server.initialized: true
+Target:Darwin:
+  ClientBuilder.fleetspeak_client_config: /usr/share/grr-server/fleetspeak-server-bin/etc/fleetspeak-server/darwin_client.config
+Target:Linux:
+  ClientBuilder.fleetspeak_client_config: /usr/share/grr-server/fleetspeak-server-bin/etc/fleetspeak-server/linux_client.config
+Target:Windows:
+  ClientBuilder.fleetspeak_client_config: /usr/share/grr-server/fleetspeak-server-bin/etc/fleetspeak-server/windows_client.config
