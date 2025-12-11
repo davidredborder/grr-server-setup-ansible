@@ -2,7 +2,7 @@
 
 # --- GRR PACKAGE DETAILS ---
 grr_version: 3.4.7-1
-grr_deb_url: "https://storage.googleapis.com/releases.grr-response.com/grr-server_{{ grr_version }}_amd64.deb"
+grr_deb_url: "https://github.com/google/grr/releases/download/v3.4.7.1-release/grr-server_{{ grr_version }}_amd64.deb"
 
 # --- MYSQL CONFIGURATION ---
 mysql_max_allowed_packet: 40M
