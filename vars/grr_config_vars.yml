@@ -4,9 +4,9 @@
 grr_version: 3.4.7-1
 grr_deb_url: "https://github.com/google/grr/releases/download/v3.4.7.1-release/grr-server_{{ grr_version }}_amd64.deb"
 
-# --- MYSQL CONFIGURATION ---
-mysql_max_allowed_packet: 40M
-mysql_log_bin_trust_function_creators: 1
+# --- MARIADB CONFIGURATION ---
+mariadb_max_allowed_packet: 40M
+mariadb_log_bin_trust_function_creators: 1
 
 # --- GRR & FLEETSPEAK DATABASE CREDENTIALS ---
 grr_database_user: grr

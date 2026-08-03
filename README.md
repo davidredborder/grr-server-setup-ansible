@@ -1,11 +1,11 @@
 # GRR Server Setup with Ansible
 
-This repository provides an Ansible playbook to automate the setup and configuration of a GRR (Google Rapid Response) server on Debian-based systems. The playbook handles dependencies, MySQL configuration, GRR and Fleetspeak installation, database setup, and initial user creation.
+This repository provides an Ansible playbook to automate the setup and configuration of a GRR (Google Rapid Response) server on Debian-based systems. The playbook handles dependencies, MariaDB configuration, GRR and Fleetspeak installation, database setup, and initial user creation.
 
 ## Features
 
 *   **Automated Installation:** Installs GRR server and its dependencies.
-*   **MySQL Configuration:** Sets up MySQL with appropriate settings for GRR and Fleetspeak databases.
+*   **MariaDB Configuration:** Sets up MariaDB with appropriate settings for GRR and Fleetspeak databases.
 *   **Database Creation:** Creates GRR and Fleetspeak databases and users.
 *   **GRR Server Configuration:** Configures the GRR server with provided settings.
 *   **Admin User Creation:** Creates an initial GRR administrator user.
@@ -43,9 +43,9 @@ Edit the `vars/grr_config_vars.yml` file:
 grr_version: 3.4.7-1
 grr_deb_url: "https://storage.googleapis.com/releases.grr-response.com/grr-server_{{ grr_version }}_amd64.deb"
 
-# --- MYSQL CONFIGURATION ---
-mysql_max_allowed_packet: 40M
-mysql_log_bin_trust_function_creators: 1
+# --- MARIADB CONFIGURATION ---
+mariadb_max_allowed_packet: 40M
+mariadb_log_bin_trust_function_creators: 1
 
 # --- GRR & FLEETSPEAK DATABASE CREDENTIALS ---
 # CHANGE THESE FOR PRODUCTION!
