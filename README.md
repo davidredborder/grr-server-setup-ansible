@@ -1,10 +1,10 @@
 # GRR Server Setup with Ansible
 
-This repository provides an Ansible playbook to automate the setup and configuration of a GRR (Google Rapid Response) server on Debian-based systems. The playbook handles dependencies, MariaDB configuration, GRR and Fleetspeak installation, database setup, and initial user creation.
+This repository provides an Ansible playbook to automate the setup and configuration of a GRR (Google Rapid Response) server on Debian-based (Debian/Ubuntu) and RedHat-based (Rocky Linux 9 / RHEL 9) systems. The playbook handles dependencies, MariaDB configuration, GRR and Fleetspeak installation, database setup, Python compatibility patching, and initial user creation.
 
 ## Features
 
-*   **Automated Installation:** Installs GRR server and its dependencies.
+*   **Automated Installation:** Installs GRR server and its dependencies on Debian/Ubuntu and Rocky Linux 9.
 *   **MariaDB Configuration:** Sets up MariaDB with appropriate settings for GRR and Fleetspeak databases.
 *   **Database Creation:** Creates GRR and Fleetspeak databases and users.
 *   **GRR Server Configuration:** Configures the GRR server with provided settings.
@@ -17,7 +17,7 @@ This repository provides an Ansible playbook to automate the setup and configura
 Before running this playbook, ensure you have:
 
 *   **Ansible:** Installed on your control machine.
-*   **Target Machine:** A Debian-based system (e.g., Ubuntu, Debian) to act as the GRR server.
+*   **Target Machine:** A Debian-based system (e.g., Ubuntu, Debian) or RedHat-based system (e.g., Rocky Linux 9, RHEL 9) to act as the GRR server.
 *   **SSH Access:** Configured for the target machine from your control machine.
 *   **Sudo Privileges:** A user with `sudo` privileges on the target machine.
 

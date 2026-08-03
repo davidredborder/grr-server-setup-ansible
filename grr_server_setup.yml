@@ -1,6 +1,6 @@
 ---
 # https://grr-doc.readthedocs.io/en/stable/installing-grr-server/from-release-deb.html
-- name: Configure and Install GRR Server
+- name: Configure and Install GRR Server on Rocky Linux 9
   hosts: grr_servers
   become: yes
   gather_facts: false
@@ -9,54 +9,55 @@
 
   tasks:
     - name: Ensure python3 is installed on target host
-      ansible.builtin.raw: test -e /usr/bin/python3 || (apt-get update && apt-get install -y python3)
+      ansible.builtin.raw: test -e /usr/bin/python3 || (dnf install -y python3)
       changed_when: false
 
     - name: Gather facts
       ansible.builtin.setup:
 
-    - name: Install required packages
-      ansible.builtin.apt:
+    - name: Install required packages (Rocky Linux 9)
+      ansible.builtin.dnf:
         name:
           - python3
-          - python3-dev
+          - python3-devel
           - python3-pip
-          - python3-venv
-          - python3-pymysql
-          - build-essential
+          - python3-PyMySQL
+          - gcc
+          - gcc-c++
+          - make
           - wget
-          - vim
+          - tar
+          - zstd
+          - binutils
+          - vim-enhanced
           - mariadb-server
         state: present
         update_cache: yes
-      register: install_deps
-      when: ansible_os_family == "Debian"
 
-    - name: Install PyMySQL python dependency
-      ansible.builtin.apt:
-        name: python3-pymysql
-        state: present
-      when: ansible_os_family == "Debian"
+    - name: Ensure MariaDB service is started and enabled
+      ansible.builtin.service:
+        name: mariadb
+        state: started
+        enabled: yes
 
-    - name: Configure MariaDB for GRR (max_allowed_packet and function creators)
+    - name: Configure MariaDB for GRR
       ansible.builtin.lineinfile:
-        path: /etc/mysql/mariadb.conf.d/50-server.cnf
+        path: /etc/my.cnf.d/mariadb-server.cnf
         regexp: '^\[mysqld\]$'
         line: |
           [mysqld]
           max_allowed_packet={{ mariadb_max_allowed_packet }}
           log_bin_trust_function_creators={{ mariadb_log_bin_trust_function_creators }}
         insertafter: EOF
+        create: yes
         state: present
         backup: yes
       notify: Restart MariaDB
-      when: ansible_os_family == "Debian"
 
     - name: Force all notified handlers to run immediately (for MariaDB config)
       ansible.builtin.meta: flush_handlers
-      when: ansible_os_family == "Debian"
 
-    - name: Create GRR and Fleetspeak databases and users using shell
+    - name: Create GRR and Fleetspeak databases and users
       ansible.builtin.shell: |
         mariadb -u root <<EOF
         CREATE DATABASE IF NOT EXISTS {{ grr_database_name }};
@@ -71,9 +72,8 @@
         EOF
       args:
         creates: /var/lib/mysql/{{ grr_database_name }}
-      when: ansible_os_family == "Debian"
 
-    - name: Download the GRR server DEB package
+    - name: Download the GRR server package
       ansible.builtin.get_url:
         url: "{{ grr_deb_url }}"
         dest: "/tmp/grr-server_{{ grr_version }}_amd64.deb"
@@ -83,32 +83,57 @@
       until: download_grr_deb is succeeded
       retries: 3
       delay: 5
-      when: ansible_os_family == "Debian"
 
-    - name: Install the GRR server DEB package
-      ansible.builtin.apt:
-        deb: "/tmp/grr-server_{{ grr_version }}_amd64.deb"
+    - name: Ensure fleetspeak group exists
+      ansible.builtin.group:
+        name: fleetspeak
         state: present
-      environment:
-        DEBIAN_FRONTEND: noninteractive
-      notify: Restart GRR Services
-      when: ansible_os_family == "Debian"
+
+    - name: Ensure fleetspeak user exists
+      ansible.builtin.user:
+        name: fleetspeak
+        group: fleetspeak
+        system: yes
+        shell: /sbin/nologin
+        state: present
+
+    - name: Extract GRR package archive to system root
+      ansible.builtin.shell: |
+        cd /tmp
+        ar x /tmp/grr-server_{{ grr_version }}_amd64.deb data.tar.zst
+        zstd -d -f data.tar.zst
+        tar -xf data.tar -C /
+        rm -f data.tar data.tar.zst
+        systemctl daemon-reload
+      args:
+        creates: /usr/share/grr-server/bin/grr_config_updater
+      notify:
+        - Reload Systemd Daemon
+        - Restart GRR Services
+
+    - name: Ensure systemd service files are installed in /etc/systemd/system
+      ansible.builtin.shell: |
+        for f in /lib/systemd/system/grr-server*.service /usr/lib/systemd/system/grr-server*.service /lib/systemd/system/fleetspeak*.service /usr/lib/systemd/system/fleetspeak*.service; do
+          if [ -f "$f" ]; then
+            cp -f "$f" /etc/systemd/system/
+          fi
+        done
+        systemctl daemon-reload
 
     - name: Detect target system Python version
       ansible.builtin.command: python3 -c "import sys; print(f'python{sys.version_info.major}.{sys.version_info.minor}')"
       register: sys_python_ver
       changed_when: false
-      when: ansible_os_family == "Debian"
 
-    - name: Ensure GRR library directory exists for system Python version
+    - name: Ensure GRR library directory symlink exists for system Python
       ansible.builtin.file:
         src: "python3.10"
         dest: "/usr/share/grr-server/lib/{{ sys_python_ver.stdout }}"
         state: link
         force: yes
-      when: ansible_os_family == "Debian" and sys_python_ver.stdout != "python3.10"
+      when: sys_python_ver.stdout != "python3.10"
 
-    - name: Patch GRR site-packages for system Python compatibility
+    - name: Patch GRR site-packages for Python 3.9+ compatibility
       ansible.builtin.shell: |
         python3 - << 'EOF'
         import os, sys, shutil, subprocess, glob
@@ -117,15 +142,20 @@
         google_dir = os.path.join(site_pkg, 'google')
         staging_dir = '/tmp/grr_pip_staging'
 
-        # 1. Build Python 3.11+ binary wheels & google packages in a staging directory
+        # 1. Build binary wheels & google packages in a staging directory
         shutil.rmtree(staging_dir, ignore_errors=True)
         os.makedirs(staging_dir, exist_ok=True)
         pkgs = [
             'psutil', 'PyYAML', 'yara-python', 'MarkupSafe', 'grpcio',
-            'cryptography', 'protobuf<4.0', 'typing_extensions',
-            'google-auth', 'google-api-python-client', 'googleapis-common-protos'
+            'cryptography', 'cffi', 'protobuf<4.0', 'typing_extensions',
+            'google-auth', 'google-api-python-client', 'googleapis-common-protos',
+            'PyMySQL'
         ]
-        subprocess.run([sys.executable, '-m', 'pip', 'install', '--target', staging_dir, '--upgrade', '--break-system-packages'] + pkgs, check=False)
+        cmd = [sys.executable, '-m', 'pip', 'install', '--target', staging_dir, '--upgrade']
+        if sys.version_info >= (3, 11):
+            cmd.append('--break-system-packages')
+        cmd.extend(pkgs)
+        subprocess.run(cmd, check=False)
 
         # 2. Copy all google/* subpackages from staging into site_pkg/google/
         if os.path.exists(os.path.join(staging_dir, 'google')):
@@ -152,7 +182,7 @@
 
         shutil.rmtree(staging_dir, ignore_errors=True)
 
-        # 4. Remove any legacy .nspkg.pth files that break Python 3.11 site.py import
+        # 4. Remove any legacy .nspkg.pth files that break Python site.py import
         for root, dirs, files in os.walk(site_pkg):
             for f in files:
                 if f.endswith('.nspkg.pth'):
@@ -161,15 +191,64 @@
                     except Exception:
                         pass
 
-        # 5. Create generic .so symlinks for any remaining C extensions
+        # 4b. Ensure MySQLdb module & CR/ER constants are available via PyMySQL fallback shim
+        mysqldb_shim = os.path.join(site_pkg, 'MySQLdb.py')
+        shim_code = (
+            "import sys\n"
+            "import pymysql\n\n"
+            "pymysql.version_info = (1, 3, 14, 'final', 0)\n"
+            "pymysql.__version__ = '1.3.14'\n"
+            "if not hasattr(pymysql.connections.Connection, 'warning_count'):\n"
+            "    pymysql.connections.Connection.warning_count = lambda self: getattr(self, '_warning_count', 0)\n\n"
+            "import pymysql.constants.CR as _CR\n"
+            "import pymysql.constants.ER as _ER\n\n"
+            "for k in dir(_CR):\n"
+            "    if k.startswith('CR_'):\n"
+            "        setattr(_CR, k[3:], getattr(_CR, k))\n\n"
+            "for k in dir(_ER):\n"
+            "    if k.startswith('ER_'):\n"
+            "        setattr(_ER, k[3:], getattr(_ER, k))\n\n"
+            "pymysql.install_as_MySQLdb()\n"
+            "sys.modules['MySQLdb.constants'] = pymysql.constants\n"
+            "sys.modules['MySQLdb.constants.CR'] = _CR\n"
+            "sys.modules['MySQLdb.constants.ER'] = _ER\n\n"
+            "from pymysql import *\n"
+        )
+        with open(mysqldb_shim, 'w') as f:
+            f.write(shim_code)
+
+        # 4c. Ensure grr_response_core/_semantic file exists (re-extract from DEB if missing from previous run)
+        core_dir = os.path.join(site_pkg, 'grr_response_core')
+        sem_so = os.path.join(core_dir, '_semantic.so')
+        sem_310 = os.path.join(core_dir, '_semantic.cpython-310-x86_64-linux-gnu.so')
+        if not os.path.exists(sem_so) and not os.path.exists(sem_310):
+            debs = glob.glob('/tmp/grr-server_*.deb')
+            if debs:
+                deb_file = debs[0]
+                tmp_ext = '/tmp/grr_sem_ext'
+                shutil.rmtree(tmp_ext, ignore_errors=True)
+                os.makedirs(tmp_ext, exist_ok=True)
+                subprocess.run(['ar', 'x', deb_file, 'data.tar.zst'], cwd=tmp_ext, check=False)
+                subprocess.run(['zstd', '-d', '-f', 'data.tar.zst'], cwd=tmp_ext, check=False)
+                subprocess.run(['tar', '-xf', 'data.tar', '-C', '/', './usr/share/grr-server/lib/python3.10/site-packages/grr_response_core'], cwd=tmp_ext, check=False)
+                shutil.rmtree(tmp_ext, ignore_errors=True)
+
+        # 5. Create generic .so symlinks for all binary C extensions
         for root, dirs, files in os.walk(site_pkg):
             for f in files:
-                if '.cpython-310-' in f and f.endswith('.so'):
-                    parts = f.split('.cpython-310-')
-                    base_so = parts[0] + '.so'
-                    target_path = os.path.join(root, base_so)
-                    if not os.path.exists(target_path):
-                        os.symlink(f, target_path)
+                full_f = os.path.join(root, f)
+                if f.endswith('.so') and not os.path.islink(full_f):
+                    base_name = f
+                    for tag in ['.abi3', f'.cpython-{sys.version_info.major}{sys.version_info.minor}', '.cpython-310', '.cpython-39', '.cpython-311']:
+                        if tag in base_name:
+                            parts = base_name.split(tag)
+                            base_name = parts[0] + '.so'
+                    target_link = os.path.join(root, base_name)
+                    if not os.path.exists(target_link):
+                        try:
+                            os.symlink(f, target_link)
+                        except Exception:
+                            pass
 
         # 6. Patch mysql_migration.py to split multi-statement SQL migration files for MariaDB compatibility
         mig_py = os.path.join(site_pkg, 'grr_response_server/databases/mysql_migration.py')
@@ -182,18 +261,16 @@
                 with open(mig_py, 'w') as f:
                     f.write(mig_content.replace(old_exec, new_exec))
         EOF
-      when: ansible_os_family == "Debian"
 
     - name: Check if GRR configuration file exists for idempotency
       ansible.builtin.stat:
         path: /etc/grr/server.local.yaml
       register: grr_config_stat
-      when: ansible_os_family == "Debian"
 
     - name: Generate random CSRF key if configuration file is new
       ansible.builtin.set_fact:
         grr_csrf_secret_key: "{{ lookup('ansible.builtin.password', '/dev/null length=64 chars=ascii_letters,digits,punctuation') }}"
-      when: not grr_config_stat.stat.exists and ansible_os_family == "Debian"
+      when: not grr_config_stat.stat.exists
 
     - name: Copy custom server configuration file to /etc/grr/server.local.yaml
       ansible.builtin.template:
@@ -202,23 +279,24 @@
         owner: root
         group: root
         mode: '0644'
-      when: not grr_config_stat.stat.exists and ansible_os_family == "Debian"
+      when: not grr_config_stat.stat.exists
 
     - name: Set permissions for /GRRlog.txt
       ansible.builtin.file:
         path: /GRRlog.txt
         mode: '0766'
         state: touch
-      when: ansible_os_family == "Debian"
 
     - name: Run grr_config_updater generate_keys
       ansible.builtin.command: /usr/bin/grr_config_updater generate_keys
       environment:
         PYTHONPATH: "/usr/share/grr-server/lib/python3.10/site-packages"
         PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION: "python"
-      args:
-        creates: /etc/grr/server.pem
-      when: ansible_os_family == "Debian"
+      register: grr_gen_keys_res
+      failed_when:
+        - grr_gen_keys_res.rc != 0
+        - "'KeysAlreadyExistError' not in grr_gen_keys_res.stderr"
+      changed_when: grr_gen_keys_res.rc == 0
 
     - name: Check if GRR admin user exists
       ansible.builtin.command: >
@@ -233,7 +311,6 @@
       failed_when: false
       changed_when: false
       notify: Restart GRR Services
-      when: ansible_os_family == "Debian"
 
     - name: Create initial GRR admin user if absent
       ansible.builtin.command: >
@@ -245,13 +322,12 @@
         PYTHONPATH: "/usr/share/grr-server/lib/python3.10/site-packages"
         PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION: "python"
       notify: Restart GRR Services
-      when: ansible_os_family == "Debian" and grr_update_user_res.rc != 0
+      when: grr_update_user_res.rc != 0
 
     - name: Check if fleetspeak configuration file exists
       ansible.builtin.stat:
         path: /etc/fleetspeak-server/fleetspeak_config.config
       register: fleetspeak_config_stat
-      when: ansible_os_family == "Debian"
 
     - name: Write Fleetspeak Configurator Input File
       ansible.builtin.template:
@@ -260,7 +336,7 @@
         owner: root
         group: root
         mode: '0644'
-      when: not fleetspeak_config_stat.stat.exists and ansible_os_family == "Debian"
+      when: not fleetspeak_config_stat.stat.exists
 
     - name: Write Server Services Configurator Input File
       ansible.builtin.template:
@@ -269,20 +345,18 @@
         owner: fleetspeak
         group: fleetspeak
         mode: '0644'
-      when: ansible_os_family == "Debian"
 
     - name: Check if fleetspeak server.components.config file exists
       ansible.builtin.stat:
         path: /etc/fleetspeak-server/server.components.config
       register: fleetspeak_components_stat
-      when: ansible_os_family == "Debian"
 
     - name: Run fleetspeak-config (Generates Certs and Component Configs)
       ansible.builtin.command: fleetspeak-config -config /etc/fleetspeak-server/fleetspeak_config.config
       args:
         creates: /etc/fleetspeak-server/server.components.config
       notify: Restart Fleetspeak Service
-      when: not fleetspeak_components_stat.stat.exists and ansible_os_family == "Debian"
+      when: not fleetspeak_components_stat.stat.exists
 
     - name: Set ownership of /etc/fleetspeak-server/ to fleetspeak
       ansible.builtin.file:
@@ -292,29 +366,66 @@
         mode: 'u=rwX,g=rX,o=rX'
         recurse: yes
       notify: Restart Fleetspeak Service
-      when: ansible_os_family == "Debian"
 
     - name: Generate client installer binaries (Repacking)
       ansible.builtin.command: /usr/bin/grr_config_updater repack_clients
       environment:
         PYTHONPATH: "/usr/share/grr-server/lib/python3.10/site-packages"
         PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION: "python"
-      when: ansible_os_family == "Debian"
+
+    - name: Configure firewalld ports for GRR Admin UI and Frontend
+      ansible.builtin.shell: |
+        if systemctl is-active --quiet firewalld; then
+          firewall-cmd --permanent --add-port={{ grr_adminui_port }}/tcp
+          firewall-cmd --permanent --add-port={{ grr_frontend_port }}/tcp
+          firewall-cmd --reload
+        fi
+      ignore_errors: yes
+
+    - name: Ensure Fleetspeak server service is started and enabled
+      ansible.builtin.service:
+        name: fleetspeak-server
+        state: started
+        enabled: yes
+      ignore_errors: yes
+
+    - name: Ensure GRR master service is started and enabled
+      ansible.builtin.service:
+        name: grr-server
+        state: started
+        enabled: yes
+      ignore_errors: yes
+
+    - name: Ensure GRR sub-services are started and enabled
+      ansible.builtin.service:
+        name: "grr-server@{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - admin_ui
+        - frontend
+        - worker
+        - worker2
+      ignore_errors: yes
 
     - name: Display GRR Admin UI URL
       ansible.builtin.debug:
         msg: "GRR Server setup complete! Access the Admin UI at: http://{{ grr_server_hostname }}:{{ grr_adminui_port }} (User: {{ grr_admin_username }}, Pass: {{ grr_admin_password }})"
-      when: ansible_os_family == "Debian"
 
   handlers:
+    - name: Reload Systemd Daemon
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
     - name: Restart MariaDB
       ansible.builtin.service:
         name: mariadb
         state: restarted
 
     - name: Restart Fleetspeak Service
-      ansible.builtin.service:
+      ansible.builtin.systemd:
         name: fleetspeak-server
+        daemon_reload: yes
         enabled: yes
         state: restarted
 
